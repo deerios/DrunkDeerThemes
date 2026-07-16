@@ -1,0 +1,42 @@
+# Replacing the lighting of a theme already in the gallery, at the request of whoever published it.
+#
+# The same shape as publishing one, and deliberately so: same labels, same comment, same merge —
+# see .github/actions/theme-change. The two things that make it an update rather than a submission
+# are tools/update.mjs, which checks that the person asking is the person who published the theme,
+# and the fact that it rewrites a file instead of adding one.
+
+name: Update a theme
+
+on:
+  issues:
+    # `labeled` is left out for the reason given in new-theme.yml: the form applies the label at
+    # creation, so an `opened` and a `labeled` arrive together and this would run twice.
+    types: [opened, edited, reopened]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: update-theme-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: >-
+      contains(github.event.issue.labels.*.name, 'update-theme') &&
+      !contains(github.event.issue.labels.*.name, 'merged')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: ./.github/actions/theme-change
+        with:
+          script: tools/update.mjs
+          branch: update
+          title: Update the theme "%NAME%"
+          pr-body: Replaces the lighting in `themes/%ID%.json` and rebuilds `index.json`.
+          merged-comment: Updated in #%PR% — **“%NAME_MD%”** shows its new lighting in the gallery now. Thank you!
+          token: ${{ secrets.GITHUB_TOKEN }}
