@@ -1,0 +1,31 @@
+# Checks the repository itself: the rules still do what they say, and every theme in here obeys
+# them. Runs on pull requests as well as pushes, so a theme added by hand is checked by the same
+# rules a submission through the issue form is.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # A glob rather than the folder: `node --test tools/` reads the folder as a module to run and
+      # fails on newer Node versions than this one.
+      - name: Test the rules
+        run: node --test "tools/**/*.test.mjs"
+
+      - name: Check the themes
+        run: node tools/check.mjs

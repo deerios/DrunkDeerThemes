@@ -1,0 +1,68 @@
+# The form behind the app's Publish button.
+#
+# The app opens this with the fields already filled in, so most people will never type into it —
+# they will read it, tick the box and submit. It is written to still make sense to someone who
+# found it on their own with a theme file in their hand.
+#
+# The `label` of every field here is what the automation reads the submission back out of: GitHub
+# renders each one as a `### <label>` heading in the issue body, and tools/lib/parse.mjs looks them
+# up by that heading. Changing a label here without changing it there breaks every submission.
+# tools/submission.test.mjs checks the two agree.
+
+name: Publish a theme
+description: Add your keyboard lighting theme to the gallery.
+title: 'Theme: '
+labels: ['new-theme']
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Themes are checked and published automatically — usually within a minute or two of
+        submitting. If something is wrong with it you will get a comment here saying what, and you
+        can fix it by editing this issue.
+
+        The easiest way to fill this in is the **Publish** button in the
+        [theme gallery](https://github.com/deerios/DrunkDeerSDK), which fills in the JSON for you.
+
+  - type: input
+    id: theme-name
+    attributes:
+      label: Theme name
+      description: What the theme is called in the gallery. Two themes cannot share a name.
+      placeholder: Ocean Sunrise
+    validations:
+      required: true
+
+  - type: input
+    id: credit
+    attributes:
+      label: Credit this theme to
+      description: The name shown under the theme in the gallery. Leave empty to be credited as your GitHub username.
+      placeholder: Your name or handle
+    validations:
+      required: false
+
+  - type: textarea
+    id: theme-json
+    attributes:
+      label: Theme JSON
+      description: >
+        The lighting itself. The Publish button puts this here for you. By hand: export a profile
+        from the app, or from `deerkb profile show`, and paste the whole file — only its lighting
+        will be published.
+      render: json
+    validations:
+      # Declared, but do not rely on it: GitHub does not enforce `required` on a textarea that sets
+      # `render`, so this field can be submitted empty however it is marked. The real check is
+      # tools/submit.mjs, which answers an empty one with a comment saying so.
+      # https://github.com/orgs/community/discussions/46714
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: This theme is my own work, and I am happy for it to be published in the gallery under the repository's licence.
+          required: true

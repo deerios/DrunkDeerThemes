@@ -1,0 +1,143 @@
+# Publishing a theme somebody submitted through the issue form.
+#
+# The shape of it: read the issue, check it, and either say why it cannot be published or open a
+# pull request adding it and merge that. The issue's labels say where a submission has got to at
+# every point — new-theme (submitted) -> invalid or accepted -> merged.
+#
+# All the judgement is in tools/submit.mjs. This file only reacts to its verdict, which is why the
+# rules can be tested with `node --test` and this file cannot.
+
+name: Publish a theme
+
+on:
+  issues:
+    types: [opened, edited, reopened, labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+# One run at a time per issue. Editing an issue twice in quick succession otherwise has two runs
+# pushing the same branch and racing to merge it.
+concurrency:
+  group: new-theme-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # A theme already merged is finished with: its issue is closed, and an edit to it now cannot
+    # unpublish or change anything. Removing the merged label is how you deliberately re-run one.
+    if: >-
+      contains(github.event.issue.labels.*.name, 'new-theme') &&
+      !contains(github.event.issue.labels.*.name, 'merged')
+    runs-on: ubuntu-latest
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ISSUE: ${{ github.event.issue.number }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # The issue body is a stranger's text. It reaches the script as an environment variable and
+      # never as part of a command line, so a submission full of backticks is a submission full of
+      # backticks and not a shell.
+      - name: Check the submission
+        id: check
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+        run: node tools/submit.mjs
+
+      # `|| true` on every label removal: the label being removed is the one this submission is not
+      # in any more, and on a first submission it was never there to remove. Not something to stop
+      # the run over either way.
+      - name: Say why it cannot be published
+        if: steps.check.outputs.valid != 'true'
+        run: |
+          gh issue edit "$ISSUE" --remove-label accepted || true
+          gh issue edit "$ISSUE" --add-label invalid
+          gh issue comment "$ISSUE" --body-file submission-comment.md
+
+      - name: Accept it
+        if: steps.check.outputs.valid == 'true'
+        run: |
+          gh issue edit "$ISSUE" --remove-label invalid || true
+          gh issue edit "$ISSUE" --add-label accepted
+          gh issue comment "$ISSUE" --body-file submission-comment.md
+
+      - name: Publish it
+        if: steps.check.outputs.valid == 'true'
+        env:
+          # Through the environment for the same reason as the issue body: the theme's name is
+          # whatever the submitter typed.
+          NAME: ${{ steps.check.outputs.name }}
+          ID: ${{ steps.check.outputs.id }}
+        run: |
+          set -euo pipefail
+          branch="theme/issue-$ISSUE"
+
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          # -A so that a theme file the script removed is staged as removed: an issue edited to
+          # rename its theme leaves the file it published under the old name behind.
+          git add -A themes "index.json"
+
+          # Nothing to add means this exact theme is already in main — an issue re-checked after it
+          # was published, or edited in a way that changed nothing. Not a failure; just done.
+          if git diff --cached --quiet; then
+            echo "\"$NAME\" is already published. Nothing to do."
+            gh issue edit "$ISSUE" --remove-label accepted || true
+            gh issue edit "$ISSUE" --add-label merged
+            gh issue close "$ISSUE" --reason completed
+            exit 0
+          fi
+
+          git commit -m "Add the theme \"$NAME\"" -m "Submitted in #$ISSUE."
+          # Forced because an edited issue rewrites the branch it already pushed. The branch is this
+          # workflow's own working space, one per issue, so there is nobody else's work under it.
+          git push --force origin "HEAD:refs/heads/$branch"
+
+          # An edited issue already has a pull request open; a new one does not. Deliberately says
+          # "Submitted in" rather than "Closes": the issue is closed by the step below, after the
+          # merge, so that the labels and the closing happen in an order this workflow chose.
+          pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then
+            # Written to a file rather than passed inline: a body indented to match this script
+            # would arrive indented, and four spaces of indent is markdown for "this is code".
+            {
+              printf 'Adds `themes/%s.json` and rebuilds `index.json`.\n\n' "$ID"
+              printf 'Submitted in #%s and checked by `tools/submit.mjs`.\n' "$ISSUE"
+            } > pr-body.md
+            pr=$(gh pr create \
+              --base main --head "$branch" \
+              --title "Add the theme \"$NAME\"" \
+              --body-file pr-body.md \
+              | grep -o '[0-9]*$')
+          fi
+
+          # GitHub works out whether a branch can merge after the push, not during it, so a pull
+          # request opened a second ago can answer "not yet known" and refuse to merge.
+          for attempt in 1 2 3 4 5; do
+            if gh pr merge "$pr" --squash --delete-branch; then
+              merged=yes
+              break
+            fi
+            echo "Merge not ready (attempt $attempt); waiting."
+            sleep 5
+          done
+          [ "${merged:-}" = yes ] || { echo "Could not merge #$pr."; exit 1; }
+
+          # Split, like the removals above: the theme is merged by this point, and failing the run
+          # over a label that somebody had already taken off by hand would say it was not.
+          gh issue edit "$ISSUE" --remove-label accepted || true
+          gh issue edit "$ISSUE" --add-label merged
+          gh issue comment "$ISSUE" --body "Published in #$pr — **“$NAME”** is in the gallery now. Thank you!"
+          gh issue close "$ISSUE" --reason completed
