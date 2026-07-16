@@ -23,6 +23,11 @@ export function themeFile(id) {
  * that opened the issue. Both are kept: the first is what the gallery shows, and the second is the
  * only part of the pair that is evidence of anything, so it is what a later rename or removal
  * request is checked against.
+ *
+ * `issue` is 0 for the six themes the app shipped with, which were seeded here rather than
+ * submitted. Nothing needs to special-case that — a real issue is never numbered 0, so the clash
+ * check in tools/submit.mjs treats them as somebody else's themes and protects their names, which
+ * is what they should be.
  */
 export function themeRecord({ id, name, author, submittedBy, issue, theme }) {
   return { id, name, author, submittedBy, issue, theme };

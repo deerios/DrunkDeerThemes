@@ -1,0 +1,48 @@
+{
+  "id": "ember",
+  "name": "Ember",
+  "author": "DrunkDeer",
+  "submittedBy": "deerios",
+  "issue": 0,
+  "theme": {
+    "brightness": 9,
+    "baseColor": {
+      "r": 120,
+      "g": 20,
+      "b": 0
+    },
+    "baseBrightness": 4,
+    "keys": {
+      "W": {
+        "r": 255,
+        "g": 120,
+        "b": 0
+      },
+      "A": {
+        "r": 255,
+        "g": 120,
+        "b": 0
+      },
+      "S": {
+        "r": 255,
+        "g": 120,
+        "b": 0
+      },
+      "D": {
+        "r": 255,
+        "g": 120,
+        "b": 0
+      },
+      "Escape": {
+        "r": 255,
+        "g": 60,
+        "b": 0
+      },
+      "Space": {
+        "r": 255,
+        "g": 60,
+        "b": 0
+      }
+    }
+  }
+}
