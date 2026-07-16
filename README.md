@@ -1,21 +1,22 @@
-# DrunkDeer Themes
+# DrunkDeer Keyboard Themes
 
-Keyboard lighting themes for [DrunkDeer keyboards](https://github.com/deerios/DrunkDeerSDK), shared
-by the people who made them.
+This is a place to find and share keyboard lighting themes for [DrunkDeer keyboards](https://github.com/deerios/DrunkDeerSDK). These themes are created and shared by users in the community.
 
-## Publishing a theme
+## How to Share Your Theme
 
-Use the **Publish** button in the app's theme gallery. It opens a
-[new issue](https://github.com/deerios/DrunkDeerThemes/issues/new?template=new-theme.yml) with your
-theme already filled in - read it, tick the box, submit.
+You can easily share your own lighting theme using these steps:
 
-You will get a comment back within a minute or two: either your theme is published, or the comment
-says what is wrong with it. If something is wrong, **edit the issue** rather than opening a new one;
-every edit is checked again.
+1. **Submit your theme:** Click the **Publish** button inside the app's theme gallery. This will automatically open a [new issue page on GitHub](https://github.com/deerios/DrunkDeerThemes/issues/new?template=new-theme.yml) with your theme's information already filled in. 
+2. **Review and send:** Read through the page, check the box, and click submit.
+3. **Wait for the automatic check:** Within one or two minutes, you will get a reply comment. 
+   - **If everything is correct:** Your theme will be published.
+   - **If there is an error:** The comment will tell you what to fix. If this happens, **do not open a new page**. Just **edit your original post**, and the system will check it again.
 
-To do it by hand, open the same issue form and paste your theme JSON in yourself. A profile exported
-from the app works as it is — only its lighting is published.
+*Note: If you prefer to do this manually, you can open the same link and paste your theme's code (JSON format) yourself. If you export a profile from the app, it will work perfectly (only the lighting settings will be shared).*
 
-## Requirements
+## Rules for Themes
 
-- A **name** and a **credit**, each up to 40 characters, and no two themes share a name.
+To be accepted, your theme must have:
+- A **name** (under 40 characters).
+- A **creator name / credit** (under 40 characters).
+- A unique name (it cannot have the same name as an existing theme).
