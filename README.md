@@ -10,7 +10,7 @@ You can easily share your own lighting theme using these steps:
 2. **Review and send:** Read through the page, check the box, and click submit.
 3. **Wait for the automatic check:** Within one or two minutes, you will get a reply comment. 
    - **If everything is correct:** Your theme will be published.
-   - **If there is an error:** The comment will tell you what to fix. If this happens, **do not open a new page**. Just **edit your original post**, and the system will check it again.
+   - **If there is an error:** The comment will tell you what to fix. If this happens, **do not open a new issue**. Just **edit your original issue**, and the system will check it again.
 
 *Note: If you prefer to do this manually, you can open the same link and paste your theme's code (JSON format) yourself. If you export a profile from the app, it will work perfectly (only the lighting settings will be shared).*
 
