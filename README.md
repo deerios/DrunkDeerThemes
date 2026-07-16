@@ -70,14 +70,3 @@ node --test "tools/**/*.test.mjs"
 There is no human in that loop, so **the checks are the only gate** — anything they accept is
 published. They are about the shape of a theme, not its taste, and they cannot judge a name. Themes
 are removed the same way they arrive: open an issue with the `remove-theme` label.
-
-## A note on `tools/lib/keys.json`
-
-That file is a copy of the `DDKey` enum from
-[the SDK](https://github.com/deerios/DrunkDeerSDK/blob/master/DrunkDeer/Keys/DDKey.cs), which is
-where key names are really defined. It is a copy because checking a submission here should not mean
-building a C# SDK first.
-
-Being a copy, it can fall behind. If the SDK gains a key, this file needs the same key adding or
-themes using it will be turned away for a key that exists. It is generated from the enum, in
-declaration order, and nothing else in here depends on that order.
