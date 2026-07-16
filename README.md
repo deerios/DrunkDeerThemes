@@ -44,7 +44,7 @@ the whole board, which is what `brightness` sets.
 
 | | |
 | --- | --- |
-| `themes/<id>.json` | One theme, as published, with the name, the credit and the issue it came from. |
+| `themes/<id>.json` | One theme, as published, with the name, the credit and the issue it came from. `"issue": 0` means it came from no issue: the six the app shipped with, seeded with this repository. |
 | `index.json` | Every theme in one file, for the gallery to fetch. **Generated** — run `node tools/build-index.mjs`. |
 | `tools/lib/` | The rules: reading an issue, checking a theme, building the catalogue. |
 | `tools/submit.mjs` | One submission, checked and turned into a theme file. Run by the workflow. |
@@ -68,5 +68,20 @@ node --test "tools/**/*.test.mjs"
 4. The issue is labelled **`merged`** and closed.
 
 There is no human in that loop, so **the checks are the only gate** — anything they accept is
-published. They are about the shape of a theme, not its taste, and they cannot judge a name. Themes
-are removed the same way they arrive: open an issue with the `remove-theme` label.
+published. They are about the shape of a theme, not its taste, and they cannot judge a name.
+
+Removal is the other way round: there is no automation for it. Open an issue and a maintainer
+deletes `themes/<id>.json` and re-runs `node tools/build-index.mjs`. That is the only answer to a
+theme that passes every check and should still not be in the gallery, so it is deliberately a person
+rather than a workflow.
+
+## A note on `tools/lib/keys.json`
+
+That file is a copy of the `DDKey` enum from
+[the SDK](https://github.com/deerios/DrunkDeerSDK/blob/master/DrunkDeer/Keys/DDKey.cs), which is
+where key names are really defined. It is a copy because checking a submission here should not mean
+building a C# SDK first.
+
+Being a copy, it can fall behind. If the SDK gains a key, this file needs the same key adding or
+themes using it will be turned away for a key that exists. It is generated from the enum, in
+declaration order, and nothing else in here depends on that order.
