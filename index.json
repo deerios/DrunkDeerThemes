@@ -194,7 +194,7 @@
     {
       "id": "daylight",
       "name": "Daylight",
-      "author": "DrunkDeer",
+      "author": "deerios",
       "theme": {
         "brightness": 9,
         "baseColor": {
@@ -208,7 +208,7 @@
     {
       "id": "ember",
       "name": "Ember",
-      "author": "DrunkDeer",
+      "author": "deerios",
       "theme": {
         "brightness": 9,
         "baseColor": {
@@ -254,7 +254,7 @@
     {
       "id": "matrix",
       "name": "Matrix",
-      "author": "DrunkDeer",
+      "author": "deerios",
       "theme": {
         "brightness": 9,
         "baseColor": {
@@ -400,7 +400,7 @@
     {
       "id": "vaporwave",
       "name": "Vaporwave",
-      "author": "DrunkDeer",
+      "author": "deerios",
       "theme": {
         "brightness": 9,
         "baseColor": {
@@ -485,7 +485,7 @@
     {
       "id": "wasd",
       "name": "WASD",
-      "author": "DrunkDeer",
+      "author": "deerios",
       "theme": {
         "brightness": 9,
         "baseColor": {
