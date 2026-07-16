@@ -18,8 +18,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Themes are checked and published automatically — usually within a minute or two of
-        submitting. If something is wrong with it you will get a comment here saying what, and you
+        Themes are checked and published automatically. If something is wrong with it you will get a comment here saying what, and you
         can fix it by editing this issue.
 
         The easiest way to fill this in is the **Publish** button in the
@@ -30,7 +29,7 @@ body:
     attributes:
       label: Theme name
       description: What the theme is called in the gallery. Two themes cannot share a name.
-      placeholder: Ocean Sunrise
+      placeholder: Arctic Nord
     validations:
       required: true
 
@@ -49,8 +48,8 @@ body:
       label: Theme JSON
       description: >
         The lighting itself. The Publish button fills this in for you as a compressed string
-        starting with `z1.` — that is expected, leave it as it is. By hand: export a profile from
-        the app, or from `deerkb profile show`, and paste the whole file as plain JSON — only its
+        starting with `z1.` - that is expected, leave it as it is. By hand: export a profile from
+        the app, or from `deerkb profile show`, and paste the whole file as plain JSON - only its
         lighting will be published.
       render: json
     validations:
