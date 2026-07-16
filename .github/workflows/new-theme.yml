@@ -11,7 +11,12 @@ name: Publish a theme
 
 on:
   issues:
-    types: [opened, edited, reopened, labeled]
+    # Not `labeled`: the issue form attaches the `new-theme` label at creation, and GitHub fires
+    # `opened` and `labeled` for that within the same second — both pass the guard below, so this
+    # workflow used to run twice on every submission and post its comment twice. `edited` is the
+    # documented way to force a recheck (README: "edit the issue... it will be checked again"), so
+    # nothing is lost by dropping `labeled`; a stray relabel was never a supported way to re-run this.
+    types: [opened, edited, reopened]
 
 permissions:
   contents: write
