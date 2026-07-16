@@ -2,14 +2,34 @@
 //
 // An issue form does not store the values anywhere structured: it renders them into the issue body
 // as markdown, one `### <label>` heading per field followed by the value. So the labels in
-// .github/ISSUE_TEMPLATE/new-theme.yml are load-bearing — they are the only link between a field
-// and the code that reads it. The names below must match that file, and tools/submission.test.mjs
-// reads the template and fails if they ever drift apart.
+// .github/ISSUE_TEMPLATE/*.yml are load-bearing — they are the only link between a field and the
+// code that reads it. The names below must match those files, and tools/submission.test.mjs reads
+// every template and fails if they ever drift apart.
 
+/** .github/ISSUE_TEMPLATE/new-theme.yml — publishing a theme. */
 export const FIELDS = {
   name: 'Theme name',
   author: 'Credit this theme to',
   json: 'Theme JSON',
+  confirm: 'Confirmation',
+};
+
+/**
+ * .github/ISSUE_TEMPLATE/update-theme.yml — replacing the lighting of a theme already published.
+ *
+ * There is no name and no credit: an update changes the picture and nothing else, so the two things
+ * a person might want to argue about are the ones it cannot touch. Renaming is removing and
+ * publishing again, which is the only way the id — and so the file — can move.
+ */
+export const UPDATE_FIELDS = {
+  id: 'Theme id',
+  json: 'Theme JSON',
+  confirm: 'Confirmation',
+};
+
+/** .github/ISSUE_TEMPLATE/remove-theme.yml — taking a theme back out of the gallery. */
+export const REMOVE_FIELDS = {
+  id: 'Theme id',
   confirm: 'Confirmation',
 };
 
