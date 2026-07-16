@@ -1,0 +1,42 @@
+# Taking a theme back out of the gallery, at the request of whoever published it.
+#
+# The same machinery as the other two — see .github/actions/theme-change — with tools/unpublish.mjs
+# in the judging seat. It is the only one of the three that destroys anything, which is why the check
+# it turns on (is this yours?) is the whole of what it does, and why the README says a maintainer
+# deleting the file by hand is still the backstop for everything this cannot decide.
+
+name: Remove a theme
+
+on:
+  issues:
+    # `labeled` is left out for the reason given in new-theme.yml: the form applies the label at
+    # creation, so an `opened` and a `labeled` arrive together and this would run twice.
+    types: [opened, edited, reopened]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: remove-theme-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  remove:
+    if: >-
+      contains(github.event.issue.labels.*.name, 'remove-theme') &&
+      !contains(github.event.issue.labels.*.name, 'merged')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: ./.github/actions/theme-change
+        with:
+          script: tools/unpublish.mjs
+          branch: remove
+          title: Remove the theme "%NAME%"
+          pr-body: Removes `themes/%ID%.json` and rebuilds `index.json`.
+          merged-comment: Removed in #%PR% — **“%NAME_MD%”** is out of the gallery now.
+          token: ${{ secrets.GITHUB_TOKEN }}

@@ -9,11 +9,11 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { deflateRawSync } from 'node:zlib';
-import { FIELDS, isChecked, parseIssueBody, unfence } from './lib/parse.mjs';
+import { FIELDS, REMOVE_FIELDS, UPDATE_FIELDS, isChecked, parseIssueBody, unfence } from './lib/parse.mjs';
 import { LIMITS, toId, validateSubmission } from './lib/validate.mjs';
-import { buildIndex, serialise } from './lib/catalogue.mjs';
+import { INDEX_VERSION, buildIndex, serialise } from './lib/catalogue.mjs';
 
 /** Packs JSON the way the app's Publish link does, for tests on the receiving end of it. */
 const pack = (json) => `z1.${deflateRawSync(Buffer.from(json, 'utf8')).toString('base64url')}`;
@@ -307,18 +307,35 @@ describe('reading an issue GitHub wrote from the form', () => {
   });
 });
 
-describe('the issue form', () => {
-  test('still labels its fields the way the parser looks them up', async () => {
-    // The one drift that would break every submission while every test above kept passing: the
-    // labels in the form are the only link between a field and the code that reads it.
-    const template = await readFile('.github/ISSUE_TEMPLATE/new-theme.yml', 'utf8');
-    for (const label of Object.values(FIELDS)) {
-      assert.equal(
-        template.includes(`label: ${label}`),
-        true,
-        `The issue form has no field labelled "${label}", but parse.mjs reads one.`,
-      );
-    }
+describe('the issue forms', () => {
+  // The one drift that would break every submission while every test above kept passing: the
+  // labels in a form are the only link between a field and the code that reads it. One case per
+  // form, because there are three of them now and a loop that quietly checked none of them —
+  // a renamed file, an empty map — would look exactly like a pass.
+  const forms = [
+    ['new-theme.yml', FIELDS],
+    ['update-theme.yml', UPDATE_FIELDS],
+    ['remove-theme.yml', REMOVE_FIELDS],
+  ];
+
+  for (const [file, fields] of forms) {
+    test(`${file} still labels its fields the way the parser looks them up`, async () => {
+      const template = await readFile(`.github/ISSUE_TEMPLATE/${file}`, 'utf8');
+      const labels = Object.values(fields);
+      assert.ok(labels.length > 0, 'parse.mjs reads no fields out of this form, which cannot be right.');
+      for (const label of labels) {
+        assert.equal(
+          template.includes(`label: ${label}`),
+          true,
+          `${file} has no field labelled "${label}", but parse.mjs reads one.`,
+        );
+      }
+    });
+  }
+
+  test('are the only forms there are, so a new one cannot go unparsed', async () => {
+    const onDisk = (await readdir('.github/ISSUE_TEMPLATE')).filter((f) => f.endsWith('.yml')).sort();
+    assert.deepEqual(onDisk, forms.map(([file]) => file).sort());
   });
 });
 
@@ -328,17 +345,24 @@ describe('the catalogue', () => {
     { id: 'a', name: 'A', author: 'y', submittedBy: 'y', issue: 1, theme: { brightness: 8 } },
   ];
 
-  test('carries each theme in full, so the gallery can draw them all from one file', () => {
+  test('says what each theme is called and who by, and nothing about what it looks like', () => {
     const index = buildIndex(themes);
-    assert.deepEqual(index.themes[0], { id: 'b', name: 'B', author: 'x', theme: { brightness: 9 } });
+    assert.equal(index.version, INDEX_VERSION);
+    assert.deepEqual(index.themes[0], { id: 'b', name: 'B', author: 'x', submittedBy: 'x', issue: 2 });
   });
 
-  test('leaves out who submitted it and which issue it came from', () => {
-    // Those are the repository's record, not the gallery's business, and every reader of index.json
-    // would otherwise be handed a list of accounts it has no use for.
-    const [first] = buildIndex(themes).themes;
-    assert.equal('submittedBy' in first, false);
-    assert.equal('issue' in first, false);
+  test('leaves the lighting out, so a gallery fetches the themes it is showing and no more', () => {
+    // The point of the whole file: a page of six cards costs six theme files, not every theme in
+    // the repository. The app fetches themes/<id>.json when it has a card to draw with it.
+    for (const entry of buildIndex(themes).themes) assert.equal('theme' in entry, false);
+  });
+
+  test('names no path, so the reader works the file out from an id it has already checked', () => {
+    // An id is checked against a pattern at both ends before anything is fetched with it. A path
+    // the catalogue supplied would be a second, unchecked way to say where a theme lives.
+    for (const entry of buildIndex(themes).themes) {
+      assert.deepEqual(Object.keys(entry).filter((k) => /file|path|url/i.test(k)), []);
+    }
   });
 
   test('is written with a trailing newline, like every other file here', () => {

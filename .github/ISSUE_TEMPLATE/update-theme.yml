@@ -1,0 +1,62 @@
+# The form behind the app's Modify button.
+#
+# Replaces the lighting of a theme already in the gallery. Only the account that published it can:
+# the check is in tools/lib/request.mjs, against the account that opens this issue, so there is
+# nothing to fill in here that says who you are.
+#
+# As with new-theme.yml, the `label` of every field is what the automation reads the request back out
+# of — GitHub renders each as a `### <label>` heading and tools/lib/parse.mjs looks them up by it.
+# UPDATE_FIELDS in that file must match, and tools/submission.test.mjs fails if they drift.
+
+name: Update a theme
+description: Replace the lighting of a theme you published.
+title: 'Update theme: '
+labels: ['update-theme']
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Updates are checked and applied automatically — usually within a minute or two. If something
+        is wrong you will get a comment here saying what, and you can fix it by editing this issue.
+
+        The easiest way to fill this in is the **Modify** button on your own theme in the gallery,
+        which fills in both boxes for you.
+
+        This changes the theme's **lighting only**. Its name and credit stay as they are — to rename
+        a theme, remove it and publish it again.
+
+  - type: input
+    id: theme-id
+    attributes:
+      label: Theme id
+      description: >
+        Which theme to update — the id it is published under, which is what its file is called
+        (`themes/<id>.json`). The Modify button fills this in.
+      placeholder: ocean-sunrise
+    validations:
+      required: true
+
+  - type: textarea
+    id: theme-json
+    attributes:
+      label: Theme JSON
+      description: >
+        The new lighting. The Modify button fills this in for you as a compressed string starting
+        with `z1.` — that is expected, leave it as it is. By hand: export a profile from the app, or
+        from `deerkb profile show`, and paste the whole file as plain JSON — only its lighting is
+        used.
+      render: json
+    validations:
+      # Declared, but do not rely on it: GitHub does not enforce `required` on a textarea that sets
+      # `render`. The real check is tools/update.mjs. Same as new-theme.yml — see the note there.
+      # https://github.com/orgs/community/discussions/46714
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: I understand this replaces the theme in the gallery for everyone, and that the old lighting is not kept.
+          required: true

@@ -1,9 +1,14 @@
 // The catalogue: what a theme file looks like, and how index.json is built from all of them.
 //
-// index.json carries every theme in full rather than a list of pointers, because the thing that
-// reads it — the app's theme gallery — draws all of them at once and would otherwise fetch every
-// file to draw anything. It is generated, never hand-edited; the CI check re-generates it and fails
-// if the result differs from what is committed.
+// index.json carries what a theme *is called*, not what it looks like: the id, the name, the credit,
+// who submitted it, and the issue it came from. The lighting stays in themes/<id>.json, which the
+// app fetches when it has a card to draw with it — a gallery that pages through hundreds of themes
+// downloads the handful it is showing rather than all of them to show the first six. That is also
+// why there is no path in here: the file for a theme is themes/<id>.json, worked out from an id the
+// reader has already checked, rather than a location the catalogue gets to name.
+//
+// It is generated, never hand-edited; the CI check re-generates it and fails if the result differs
+// from what is committed.
 
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -54,15 +59,28 @@ export async function readThemes(root = '.') {
 }
 
 /**
+ * The version of index.json this builds.
+ *
+ * The app refuses a version it does not know rather than guessing at a file that has been
+ * rearranged under it, so this number and the app's `ThemeGallery.IndexVersion` are one agreement
+ * in two repositories. 2 is metadata only; 1 carried each theme's lighting inline.
+ */
+export const INDEX_VERSION = 2;
+
+/**
  * The catalogue for a set of themes.
+ *
+ * `theme` is deliberately not in it — see the note at the top of this file. `submittedBy` is: it is
+ * how the app knows which of these are yours to modify or unpublish, and it is already public, being
+ * the account that opened the issue.
  *
  * No timestamp, deliberately: a generated file that changes whenever it is generated cannot be
  * checked against the sources it came from, which is the one job the CI check has.
  */
 export function buildIndex(themes) {
   return {
-    version: 1,
-    themes: themes.map(({ id, name, author, theme }) => ({ id, name, author, theme })),
+    version: INDEX_VERSION,
+    themes: themes.map(({ id, name, author, submittedBy, issue }) => ({ id, name, author, submittedBy, issue })),
   };
 }
 

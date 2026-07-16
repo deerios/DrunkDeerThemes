@@ -4,8 +4,10 @@
 # pull request adding it and merge that. The issue's labels say where a submission has got to at
 # every point — new-theme (submitted) -> invalid or accepted -> merged.
 #
-# All the judgement is in tools/submit.mjs. This file only reacts to its verdict, which is why the
-# rules can be tested with `node --test` and this file cannot.
+# All the judgement is in tools/submit.mjs, and everything after the verdict is in
+# .github/actions/theme-change, which this shares with the update and remove flows. This file is
+# only which script, which words, and when to run at all — which is why the rules can be tested with
+# `node --test` and this cannot.
 
 name: Publish a theme
 
@@ -38,158 +40,16 @@ jobs:
       !contains(github.event.issue.labels.*.name, 'merged')
     runs-on: ubuntu-latest
 
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      ISSUE: ${{ github.event.issue.number }}
-
     steps:
-      # Pinned to commit SHAs rather than the v4 tag. A tag is a moving pointer, and this job holds
-      # a token that can write to main and merges without anybody reading the result — so an action
-      # that changed under us would be running with the keys. The comment is the readable half; the
-      # SHA is the half that is checked. Renovate/Dependabot update both together.
+      # Pinned to a commit SHA — see the note in .github/actions/theme-change. It cannot live in
+      # there with the rest: an action in this repository cannot be what fetches this repository.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: ./.github/actions/theme-change
         with:
-          node-version: '22'
-
-      # The issue body is a stranger's text. It reaches the script as an environment variable and
-      # never as part of a command line, so a submission full of backticks is a submission full of
-      # backticks and not a shell.
-      - name: Check the submission
-        id: check
-        env:
-          ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
-        run: node tools/submit.mjs
-
-      # `|| true` on every label removal: the label being removed is the one this submission is not
-      # in any more, and on a first submission it was never there to remove. Not something to stop
-      # the run over either way.
-      - name: Say why it cannot be published
-        if: steps.check.outputs.valid != 'true'
-        run: |
-          gh issue edit "$ISSUE" --remove-label accepted || true
-          gh issue edit "$ISSUE" --add-label invalid
-          gh issue comment "$ISSUE" --body-file submission-comment.md
-
-      - name: Accept it
-        if: steps.check.outputs.valid == 'true'
-        run: |
-          gh issue edit "$ISSUE" --remove-label invalid || true
-          gh issue edit "$ISSUE" --add-label accepted
-          gh issue comment "$ISSUE" --body-file submission-comment.md
-
-      - name: Publish it
-        if: steps.check.outputs.valid == 'true'
-        env:
-          # Through the environment for the same reason as the issue body: the theme's name is
-          # whatever the submitter typed.
-          NAME: ${{ steps.check.outputs.name }}
-          NAME_MD: ${{ steps.check.outputs.nameMd }}
-          ID: ${{ steps.check.outputs.id }}
-          # The submission again, because `rebuild` below runs the checks a second time. Same rule
-          # as the check step: it arrives as environment, never as part of a command line.
-          ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
-        run: |
-          set -euo pipefail
-          branch="theme/issue-$ISSUE"
-
-          git config user.name  'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-
-          # Builds the theme again on top of whatever main is *now*, and says whether it still
-          # passes. Every attempt starts from here, including the first.
-          #
-          # index.json holds every theme in one file, so two submissions in flight at once both
-          # rewrite the same lines of it, from the same starting point. Whoever merges second is a
-          # conflict — not a theoretical one: it is every pair of submissions that overlap, whatever
-          # they are called. Rebuilding on top of the winner is what makes the second one mergeable,
-          # and re-running the checks is the price of it, since "is this name taken" has a different
-          # answer against the new main than it had a minute ago.
-          rebuild() {
-            rm -f verdict.txt
-            git fetch --quiet origin main
-            git reset --quiet --hard origin/main
-            # The previous attempt's theme file is untracked, so reset leaves it: it would be staged
-            # below even if this attempt decided against writing it.
-            git clean --quiet -fd themes
-            git switch --quiet -C "$branch"
-            GITHUB_OUTPUT=verdict.txt node tools/submit.mjs > /dev/null
-          }
-
-          for attempt in 1 2 3 4 5; do
-            rebuild
-
-            # It passed when it was checked and does not now, which for a submission that changed in
-            # no way means one thing: the name was free then and something else has taken it since.
-            # The comment the script just wrote says exactly that, so it is the one to send.
-            if ! grep -qx 'valid=true' verdict.txt; then
-              echo "No longer publishable against the current main."
-              gh issue edit "$ISSUE" --remove-label accepted || true
-              gh issue edit "$ISSUE" --add-label invalid
-              gh issue comment "$ISSUE" --body-file submission-comment.md
-              exit 0
-            fi
-
-            # -A so that a theme file the script removed is staged as removed: an issue edited to
-            # rename its theme leaves the file it published under the old name behind.
-            git add -A themes "index.json"
-
-            # Nothing to add means this exact theme is already in main — an issue re-checked after
-            # it was published, or edited in a way that changed nothing. Not a failure; just done.
-            if git diff --cached --quiet; then
-              echo "\"$NAME\" is already published. Nothing to do."
-              gh issue edit "$ISSUE" --remove-label accepted || true
-              gh issue edit "$ISSUE" --add-label merged
-              gh issue close "$ISSUE" --reason completed
-              exit 0
-            fi
-
-            git commit --quiet -m "Add the theme \"$NAME\"" -m "Submitted in #$ISSUE."
-            # Forced because an edited issue — and every attempt after the first — rewrites the
-            # branch it already pushed. The branch is this workflow's own working space, one per
-            # issue, so there is nobody else's work under it.
-            git push --force --quiet origin "HEAD:refs/heads/$branch"
-
-            # An edited issue already has a pull request open; a new one does not. Deliberately says
-            # "Submitted in" rather than "Closes": the issue is closed below, after the merge, so
-            # that the labels and the closing happen in an order this workflow chose.
-            pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
-            if [ -z "$pr" ]; then
-              # Written to a file rather than passed inline: a body indented to match this script
-              # would arrive indented, and four spaces of indent is markdown for "this is code".
-              {
-                printf 'Adds `themes/%s.json` and rebuilds `index.json`.\n\n' "$ID"
-                printf 'Submitted in #%s and checked by `tools/submit.mjs`.\n' "$ISSUE"
-              } > pr-body.md
-              pr=$(gh pr create \
-                --base main --head "$branch" \
-                --title "Add the theme \"$NAME\"" \
-                --body-file pr-body.md \
-                | grep -o '[0-9]*$')
-            fi
-
-            # Two reasons this refuses, and one answer to both: GitHub works out whether a branch
-            # can merge after the push rather than during it, so a pull request opened a second ago
-            # can still be saying "not yet known" — and main may have moved under it.
-            if gh pr merge "$pr" --squash --delete-branch; then
-              merged=yes
-              break
-            fi
-            echo "Merge refused (attempt $attempt); rebuilding on top of main and trying again."
-            sleep 5
-          done
-          [ "${merged:-}" = yes ] || { echo "Could not merge \"$NAME\" after 5 attempts."; exit 1; }
-
-          # Split, like the removals above: the theme is merged by this point, and failing the run
-          # over a label that somebody had already taken off by hand would say it was not.
-          gh issue edit "$ISSUE" --remove-label accepted || true
-          gh issue edit "$ISSUE" --add-label merged
-          # NAME_MD, not NAME: this is the one comment written here rather than by the script, and
-          # the name in it is still the submitter's text going out over the bot's name.
-          gh issue comment "$ISSUE" --body "Published in #$pr — **“$NAME_MD”** is in the gallery now. Thank you!"
-          gh issue close "$ISSUE" --reason completed
+          script: tools/submit.mjs
+          branch: theme
+          title: Add the theme "%NAME%"
+          pr-body: Adds `themes/%ID%.json` and rebuilds `index.json`.
+          merged-comment: Published in #%PR% — **“%NAME_MD%”** is in the gallery now. Thank you!
+          token: ${{ secrets.GITHUB_TOKEN }}

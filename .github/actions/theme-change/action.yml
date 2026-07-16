@@ -1,0 +1,232 @@
+# Everything the three theme workflows do that is not deciding what to do.
+#
+# Publishing a theme, updating one and removing one differ in exactly two interesting ways: which
+# script judges the request, and what the resulting commit is called. Everything else — reading the
+# verdict, labelling the issue, opening the pull request, and above all merging it — is one piece of
+# machinery, and it lives here rather than in three copies.
+#
+# That is not tidiness. index.json is a single generated file that every one of these rewrites, so
+# two requests in flight at once can conflict over it however unrelated they are; the retry below is
+# what handles that. Three copies of it would be three places for that to be got wrong again, and two
+# of them would be the ones nobody was looking at.
+#
+# How often that bites got *smaller* when index.json stopped carrying each theme's lighting: an entry
+# is now six lines, so two themes landing in different parts of the list merge cleanly, where two
+# hundred-line blocks did not. It did not go away, and betting on it would be a poor bet — measured
+# against a local bare repo, two themes whose names sort next to each other still conflict every
+# time, because their entries are inserted at the same place. That is a bug that would appear only
+# when two people submit at once and only for some pairs of names, which is the kind that gets found
+# in production or not at all.
+#
+# The caller is expected to have already decided the request is theirs to run — see the `if:` on each
+# workflow's job — and to have checked the repository out, which is not a division of labour anybody
+# chose: an action stored in the repository cannot be the thing that fetches the repository, so the
+# checkout is the one step that has to stay in all three.
+
+name: Apply a theme change
+description: Runs a submission script, and turns its verdict into labels, a comment, and a merged pull request.
+
+inputs:
+  script:
+    description: The script that judges the request. It must write submission-comment.md and set the `valid`, `id`, `name` and `nameMd` outputs — see tools/submit.mjs.
+    required: true
+  branch:
+    description: What to call this flow's branches. The branch is `<branch>/issue-<number>`, one per issue.
+    required: true
+  title:
+    description: The commit subject and pull request title. `%NAME%` becomes the theme's name.
+    required: true
+  pr-body:
+    description: The first line of the pull request body. `%ID%` becomes the theme's id.
+    required: true
+  merged-comment:
+    description: The comment posted once it is merged. `%PR%` becomes the pull request number, `%NAME_MD%` the theme's name with markdown defused.
+    required: true
+  token:
+    description: The token that writes. `secrets.GITHUB_TOKEN`.
+    required: true
+
+outputs:
+  valid:
+    description: Whether the request passed its checks.
+    value: ${{ steps.check.outputs.valid }}
+
+runs:
+  using: composite
+
+  steps:
+    # Pinned to a commit SHA rather than the v4 tag. A tag is a moving pointer, and these jobs hold a
+    # token that can write to main and merge without anybody reading the result — so an action that
+    # changed under us would be running with the keys. The comment is the readable half; the SHA is
+    # the half that is checked. Renovate/Dependabot update both together. The same goes for the
+    # checkout each caller does before it gets here.
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: '22'
+
+    # The issue body is a stranger's text. It reaches the script as an environment variable and never
+    # as part of a command line, so a submission full of backticks is a submission full of backticks
+    # and not a shell. The script name goes the same way — it is this repository's own text and could
+    # safely be interpolated, but a `run:` with no `${{ }}` in it at all is a rule that is easier to
+    # check than a list of exceptions to it.
+    - name: Check the request
+      id: check
+      shell: bash
+      env:
+        SCRIPT: ${{ inputs.script }}
+        ISSUE_BODY: ${{ github.event.issue.body }}
+        ISSUE_NUMBER: ${{ github.event.issue.number }}
+        ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+      run: node "$SCRIPT"
+
+    # `|| true` on every label removal: the label being removed is the one this request is not in any
+    # more, and on a first attempt it was never there to remove. Not something to stop the run over
+    # either way.
+    - name: Say why it cannot be done
+      if: steps.check.outputs.valid != 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        ISSUE: ${{ github.event.issue.number }}
+      run: |
+        gh issue edit "$ISSUE" --remove-label accepted || true
+        gh issue edit "$ISSUE" --add-label invalid
+        gh issue comment "$ISSUE" --body-file submission-comment.md
+
+    - name: Accept it
+      if: steps.check.outputs.valid == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        ISSUE: ${{ github.event.issue.number }}
+      run: |
+        gh issue edit "$ISSUE" --remove-label invalid || true
+        gh issue edit "$ISSUE" --add-label accepted
+        gh issue comment "$ISSUE" --body-file submission-comment.md
+
+    - name: Apply it
+      if: steps.check.outputs.valid == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        ISSUE: ${{ github.event.issue.number }}
+        SCRIPT: ${{ inputs.script }}
+        BRANCH_PREFIX: ${{ inputs.branch }}
+        TITLE_TEMPLATE: ${{ inputs.title }}
+        PR_BODY_TEMPLATE: ${{ inputs.pr-body }}
+        MERGED_TEMPLATE: ${{ inputs.merged-comment }}
+        # Through the environment for the same reason as the issue body: the theme's name is
+        # whatever the submitter typed.
+        NAME: ${{ steps.check.outputs.name }}
+        NAME_MD: ${{ steps.check.outputs.nameMd }}
+        ID: ${{ steps.check.outputs.id }}
+        # The request again, because `rebuild` below runs the checks a second time.
+        ISSUE_BODY: ${{ github.event.issue.body }}
+        ISSUE_NUMBER: ${{ github.event.issue.number }}
+        ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+      run: |
+        set -euo pipefail
+        branch="$BRANCH_PREFIX/issue-$ISSUE"
+
+        # Bash's own substitution, never eval: the name is the submitter's text, and the difference
+        # between putting it in a string and letting a shell read it is the whole ballgame. NAME is
+        # for git, which shows it as data; NAME_MD is for the comment, which is markdown going out
+        # over the bot's name and so is escaped before it gets here.
+        title="${TITLE_TEMPLATE//%NAME%/$NAME}"
+
+        git config user.name  'github-actions[bot]'
+        git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+        # Builds the change again on top of whatever main is *now*, and says whether it still
+        # passes. Every attempt starts from here, including the first.
+        #
+        # index.json holds every theme's entry in one file, so two requests in flight at once can
+        # rewrite the same lines of it from the same starting point — reliably so when their entries
+        # sort next to each other. Whoever merges second is then a conflict, and a conflict here is
+        # a submitter who was told "publishing it now" and got nothing.
+        # Rebuilding on top of the winner is what makes the second one mergeable, and re-running the
+        # checks is the price of it, since "is this name taken" — and "does this theme still exist",
+        # for a removal — has a different answer against the new main than it had a minute ago.
+        rebuild() {
+          rm -f verdict.txt
+          git fetch --quiet origin main
+          git reset --quiet --hard origin/main
+          # The previous attempt's theme file is untracked, so reset leaves it: it would be staged
+          # below even if this attempt decided against writing it.
+          git clean --quiet -fd themes
+          git switch --quiet -C "$branch"
+          GITHUB_OUTPUT=verdict.txt node "$SCRIPT" > /dev/null
+        }
+
+        for attempt in 1 2 3 4 5; do
+          rebuild
+
+          # It passed when it was checked and does not now, which for a request that changed in no
+          # way means something else changed under it — a name taken since, a theme removed since.
+          # The comment the script just wrote says exactly what, so it is the one to send.
+          if ! grep -qx 'valid=true' verdict.txt; then
+            echo "No longer applicable against the current main."
+            gh issue edit "$ISSUE" --remove-label accepted || true
+            gh issue edit "$ISSUE" --add-label invalid
+            gh issue comment "$ISSUE" --body-file submission-comment.md
+            exit 0
+          fi
+
+          # -A so that a theme file the script removed is staged as removed: an unpublish is nothing
+          # but a removal, and an issue edited to rename a theme leaves the file it published under
+          # the old name behind.
+          git add -A themes "index.json"
+
+          # Nothing to add means main already says this — a request re-checked after it was applied,
+          # or edited in a way that changed nothing. Not a failure; just done.
+          if git diff --cached --quiet; then
+            echo "\"$NAME\" already matches main. Nothing to do."
+            gh issue edit "$ISSUE" --remove-label accepted || true
+            gh issue edit "$ISSUE" --add-label merged
+            gh issue close "$ISSUE" --reason completed
+            exit 0
+          fi
+
+          git commit --quiet -m "$title" -m "Requested in #$ISSUE."
+          # Forced because an edited issue — and every attempt after the first — rewrites the branch
+          # it already pushed. The branch is this workflow's own working space, one per issue, so
+          # there is nobody else's work under it.
+          git push --force --quiet origin "HEAD:refs/heads/$branch"
+
+          # An edited issue already has a pull request open; a new one does not. Deliberately says
+          # "Requested in" rather than "Closes": the issue is closed below, after the merge, so that
+          # the labels and the closing happen in an order this chose.
+          pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then
+            # Written to a file rather than passed inline: a body indented to match this script would
+            # arrive indented, and four spaces of indent is markdown for "this is code".
+            {
+              printf '%s\n\n' "${PR_BODY_TEMPLATE//%ID%/$ID}"
+              printf 'Requested in #%s and checked by `%s`.\n' "$ISSUE" "$SCRIPT"
+            } > pr-body.md
+            pr=$(gh pr create \
+              --base main --head "$branch" \
+              --title "$title" \
+              --body-file pr-body.md \
+              | grep -o '[0-9]*$')
+          fi
+
+          # Two reasons this refuses, and one answer to both: GitHub works out whether a branch can
+          # merge after the push rather than during it, so a pull request opened a second ago can
+          # still be saying "not yet known" — and main may have moved under it.
+          if gh pr merge "$pr" --squash --delete-branch; then
+            merged=yes
+            break
+          fi
+          echo "Merge refused (attempt $attempt); rebuilding on top of main and trying again."
+          sleep 5
+        done
+        [ "${merged:-}" = yes ] || { echo "Could not apply \"$NAME\" after 5 attempts."; exit 1; }
+
+        # Split, like the removals above: the change is merged by this point, and failing the run
+        # over a label that somebody had already taken off by hand would say it was not.
+        gh issue edit "$ISSUE" --remove-label accepted || true
+        gh issue edit "$ISSUE" --add-label merged
+        comment="${MERGED_TEMPLATE//%PR%/$pr}"
+        gh issue comment "$ISSUE" --body "${comment//%NAME_MD%/$NAME_MD}"
+        gh issue close "$ISSUE" --reason completed

@@ -60,7 +60,7 @@ export function validateSubmission({ name, author, json, confirmed }) {
     errors.push('The confirmation box is not ticked. This repository can only publish themes their author is happy to share.');
   }
 
-  const theme = readTheme(json, errors, warnings);
+  const theme = readThemeInto(json, errors, warnings);
 
   // May be empty, and that is not an error: a name written in a script with no ASCII in it — 日本語
   // — is a perfectly good theme name that simply makes no file name. The caller supplies an id for
@@ -68,6 +68,23 @@ export function validateSubmission({ name, author, json, confirmed }) {
   const id = toId(cleanName);
 
   return { errors, warnings, theme: errors.length ? null : theme, id, name: cleanName, author: cleanAuthor };
+}
+
+/**
+ * Checks a theme on its own: `{ errors, warnings, theme }`, with `theme` meaningful only when
+ * `errors` is empty.
+ *
+ * What an update submits, where there is no name to check, no credit to check and no box to tick —
+ * the theme is replacing the picture in a file that already settled all three. The rules are the
+ * same ones {@link validateSubmission} applies to the theme half of a new submission, because they
+ * are literally the same code: an update that could carry a theme a submission could not would be a
+ * way in through the side door.
+ */
+export function validateTheme(json) {
+  const errors = [];
+  const warnings = [];
+  const theme = readThemeInto(json, errors, warnings);
+  return { errors, warnings, theme: errors.length ? null : theme };
 }
 
 /**
@@ -84,7 +101,7 @@ export function validateSubmission({ name, author, json, confirmed }) {
  * Pasting plain JSON by hand, which is how the clipboard fallback and every submission before this
  * still works, is untouched.
  */
-function readTheme(json, errors, warnings) {
+function readThemeInto(json, errors, warnings) {
   if (!json || !json.trim()) {
     errors.push('No theme JSON was given.');
     return null;

@@ -14,6 +14,15 @@ You can easily share your own lighting theme using these steps:
 
 *Note: If you prefer to do this manually, you can open the same link and paste your theme's code (JSON format) yourself. If you export a profile from the app, it will work perfectly (only the lighting settings will be shared).*
 
+## How to Change or Remove Your Theme
+
+The gallery's **My themes** section has two buttons on every theme you published. Both work exactly like Publish: they open a page with everything filled in, and the change happens automatically a minute or two after you submit it.
+
+- **Modify:** Pick one of your saved profiles and the theme's lighting is replaced with it. Its name and creator name stay the same — to rename a theme, unpublish it and publish it again.
+- **Unpublish:** Takes the theme out of the gallery. Anyone who already copied it into a profile of their own keeps their copy.
+
+**Only the person who published a theme can change or remove it.** The check is against the GitHub account that opens the issue, so there is nothing to fill in that says who you are. If you published a theme from an account you no longer have, open a normal issue and a maintainer can help.
+
 ## Rules for Themes
 
 To be accepted, your theme must have:
