@@ -180,9 +180,12 @@ describe('the name and the credit', () => {
   });
 
   test('are rejected when they hide control characters', () => {
-    // Written as an escape on purpose: a literal control character in this file would look like
-    // an ordinary name here, and the next person would delete the test as nonsense.
-    assert.match(errorsFor({ name: 'Ember' })[0], /control characters/);
+    // Built rather than typed: a literal control character here would be invisible, and the next
+    // person would read the name as an ordinary "Ember" and delete the test as nonsense. An
+    // escape would say so, but anything that carries this file as JSON decodes it straight back
+    // into the invisible byte it was avoiding — which is how this file reaches GitHub.
+    const name = `Em${String.fromCharCode(7)}ber`;
+    assert.match(errorsFor({ name })[0], /control characters/);
   });
 
   test('have their whitespace tidied rather than being rejected for it', () => {
