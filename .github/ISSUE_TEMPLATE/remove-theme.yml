@@ -1,0 +1,44 @@
+# The form behind the app's Unpublish button.
+#
+# Takes a theme back out of the gallery. Only the account that published it can: the check is in
+# tools/lib/request.mjs, against the account that opens this issue.
+#
+# As with new-theme.yml, the `label` of every field is what the automation reads the request back out
+# of. REMOVE_FIELDS in tools/lib/parse.mjs must match, and tools/submission.test.mjs fails if they
+# drift.
+
+name: Remove a theme
+description: Take a theme you published back out of the gallery.
+title: 'Remove theme: '
+labels: ['remove-theme']
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Removals are checked and applied automatically — usually within a minute or two. If something
+        is wrong you will get a comment here saying what, and you can fix it by editing this issue.
+
+        The easiest way to fill this in is the **Unpublish** button on your own theme in the gallery.
+
+        Anyone who already copied the theme into a profile of their own keeps their copy — this only
+        takes it out of the gallery. The file stays in this repository's history either way.
+
+  - type: input
+    id: theme-id
+    attributes:
+      label: Theme id
+      description: >
+        Which theme to remove — the id it is published under, which is what its file is called
+        (`themes/<id>.json`). The Unpublish button fills this in.
+      placeholder: ocean-sunrise
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: I want this theme taken out of the gallery.
+          required: true
