@@ -51,5 +51,5 @@ jobs:
           branch: theme
           title: Add the theme "%NAME%"
           pr-body: Adds `themes/%ID%.json` and rebuilds `index.json`.
-          merged-comment: Published in #%PR% — **“%NAME_MD%”** is in the gallery now. Thank you!
+          merged-comment: Published. Thank you!
           token: ${{ secrets.GITHUB_TOKEN }}
