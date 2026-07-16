@@ -12,6 +12,7 @@
 // somebody mistypes a colour would train everyone to ignore red crosses.
 
 import { appendFile, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mdMessage, mdText } from './lib/markdown.mjs';
 import { FIELDS, isChecked, parseIssueBody, unfence } from './lib/parse.mjs';
 import { validateSubmission } from './lib/validate.mjs';
 import { THEMES_DIR, readThemes, serialise, themeFile, themeRecord, writeIndex } from './lib/catalogue.mjs';
@@ -76,20 +77,29 @@ if (valid) {
 await comment({ valid, errors, warnings, id, name, author });
 await output({ valid, id, name });
 
-/** The comment posted back on the issue. It is the only thing most submitters will read. */
+/**
+ * The comment posted back on the issue. It is the only thing most submitters will read.
+ *
+ * Every piece of the submitter's own text is escaped on its way in — the name and the credit, but
+ * the messages too, because those quote back the part that was wrong: a key that is not a key, a
+ * property that is not a property, whatever JSON.parse made of the text. All of it is the
+ * submitter's, none of it is meant to be markdown, and this comment goes out signed by the bot.
+ * Escaped here, at the one place a comment is written, rather than at each message that builds one:
+ * a message added later cannot forget to do it.
+ */
 async function comment({ valid, errors, warnings, id, name, author }) {
   const lines = [];
   if (valid) {
-    lines.push(`**“${name}”** checks out. Publishing it now as \`${themeFile(id)}\`, credited to ${author}.`);
+    lines.push(`**“${mdText(name)}”** checks out. Publishing it now as \`${themeFile(id)}\`, credited to ${mdText(author)}.`);
     if (warnings.length) {
-      lines.push('', 'Worth knowing:', ...warnings.map((w) => `- ${w}`));
+      lines.push('', 'Worth knowing:', ...warnings.map((w) => `- ${mdMessage(w)}`));
     }
     lines.push('', 'This issue closes itself once the theme is merged.');
   } else {
     lines.push(
-      `Thanks for submitting **“${name || 'this theme'}”**. It can't be published yet:`,
+      `Thanks for submitting **“${mdText(name) || 'this theme'}”**. It can't be published yet:`,
       '',
-      ...errors.map((e) => `- ${e}`),
+      ...errors.map((e) => `- ${mdMessage(e)}`),
       '',
       'Edit the issue to fix them and it will be checked again — there is no need to open a new one.',
     );
@@ -97,13 +107,32 @@ async function comment({ valid, errors, warnings, id, name, author }) {
   await writeFile('submission-comment.md', `${lines.join('\n')}\n`);
 }
 
-/** Tells the workflow what happened. */
+/**
+ * Tells the workflow what happened.
+ *
+ * `nameMd` is the name with markdown defused, for the one comment the workflow writes itself rather
+ * than taking from `submission-comment.md`.
+ */
 async function output({ valid, id, name }) {
   const out = process.env.GITHUB_OUTPUT;
-  const values = { valid: String(valid), id, name };
+  const values = { valid: String(valid), id, name, nameMd: mdText(name) };
   if (!out) {
     console.log(values);
     return;
   }
-  await appendFile(out, `${Object.entries(values).map(([k, v]) => `${k}=${v}`).join('\n')}\n`);
+  await appendFile(out, `${Object.entries(values).map(([k, v]) => line(k, v)).join('\n')}\n`);
+}
+
+/**
+ * One `key=value` for GITHUB_OUTPUT, with the newlines taken out of the value.
+ *
+ * This file is read back a line at a time, so a newline inside a value starts what looks like
+ * another key — and the key a submitter would want to write is `valid=true`, over the top of this
+ * script's verdict, which publishes a theme that failed its checks. The name is squeezed onto one
+ * line long before it arrives here (`collapse` in validate.mjs, which is also what rejects the
+ * control characters), so this is a second lock on the same door. It gets two because it is the
+ * door where being wrong means the checks stop being a gate at all.
+ */
+function line(key, value) {
+  return `${key}=${String(value).replace(/[\r\n]+/g, ' ')}`;
 }
