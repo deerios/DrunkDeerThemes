@@ -9,6 +9,7 @@
 // language the SDK is not written in, and that is the price of validating without building the SDK
 // on every submission. keys.json is the part most likely to drift; see its note in the README.
 
+import { inflateRawSync } from 'node:zlib';
 import keyNames from './keys.json' with { type: 'json' };
 
 /** Every DDKey name, lower-cased, mapped to the SDK's own spelling of it. */
@@ -19,7 +20,11 @@ export const LIMITS = {
   name: 40,
   /** Longest author credit. Same reason. */
   author: 40,
-  /** Largest theme JSON, in characters. A whole-board theme is around 3 KB; this is generous. */
+  /**
+   * Largest theme JSON, in characters. A whole-board theme is around 3 KB; this is generous. Also
+   * the decompressed-size cap for a `z1.` submission, in bytes: the same "largest theme JSON" rule
+   * either way a submission arrives, so it is expressed once and used for both.
+   */
   json: 16 * 1024,
   /** Most per-key overrides. The biggest keyboard the SDK knows has fewer keys than this. */
   keys: 128,
@@ -71,13 +76,38 @@ export function validateSubmission({ name, author, json, confirmed }) {
  * Accepts either a bare theme or a whole exported profile with a `theme` section, because both are
  * things a user plausibly has to hand: the app's Publish button sends the first, and the app's
  * Export button writes the second.
+ *
+ * Also accepts the packed form the app's Publish link carries: `z1.<base64url(raw-deflate(JSON))>`.
+ * That link is escaped into a GitHub URL, and a signed-out click bounces through `/login`, which
+ * escapes the whole thing a second time — plain JSON there is long enough to trip GitHub's URL
+ * length limit, so the app sends the packed form instead and this is the other half of that fix.
+ * Pasting plain JSON by hand, which is how the clipboard fallback and every submission before this
+ * still works, is untouched.
  */
 function readTheme(json, errors, warnings) {
   if (!json || !json.trim()) {
     errors.push('No theme JSON was given.');
     return null;
   }
-  if (json.length > LIMITS.json) {
+
+  const trimmed = json.trim();
+  const packed = /^z(\d+)\./.exec(trimmed);
+  if (packed) {
+    if (packed[1] !== '1') {
+      errors.push('This theme was submitted by a newer version of the app than this repository understands.');
+      return null;
+    }
+    const unpacked = unpackTheme(trimmed.slice(packed[0].length));
+    if (unpacked === TOO_BIG) {
+      errors.push(`The theme JSON is over the ${LIMITS.json} limit.`);
+      return null;
+    }
+    if (unpacked === null) {
+      errors.push('The theme JSON could not be read: it did not decode.');
+      return null;
+    }
+    json = unpacked;
+  } else if (json.length > LIMITS.json) {
     errors.push(`The theme JSON is ${json.length} characters, over the ${LIMITS.json} limit.`);
     return null;
   }
@@ -139,6 +169,29 @@ function readTheme(json, errors, warnings) {
   if (errors.length) return null;
   if (clean.keys === undefined) delete clean.keys;
   return clean;
+}
+
+/** Returned by {@link unpackTheme} when a payload decompresses past {@link LIMITS.json}. */
+const TOO_BIG = Symbol('too big');
+
+/**
+ * Decodes a `z1.` payload back into JSON text: null if it is not one — not valid base64url, not a
+ * valid raw-deflate stream — or {@link TOO_BIG} if it is a stream that would decompress past
+ * `LIMITS.json` bytes.
+ *
+ * That last case is the one that matters: this repository auto-merges with no human in the loop, so
+ * a submission that decompresses without limit is a way to take the runner down with a few hundred
+ * characters of base64. `maxOutputLength` stops the decompression itself, before anything is held in
+ * memory to check — the size has to be capped *during* inflate, not after it.
+ */
+function unpackTheme(base64url) {
+  try {
+    const compressed = Buffer.from(base64url, 'base64url');
+    const inflated = inflateRawSync(compressed, { maxOutputLength: LIMITS.json });
+    return inflated.toString('utf8');
+  } catch (ex) {
+    return ex.code === 'ERR_BUFFER_TOO_LARGE' ? TOO_BIG : null;
+  }
 }
 
 /** A 0-9 brightness level. */

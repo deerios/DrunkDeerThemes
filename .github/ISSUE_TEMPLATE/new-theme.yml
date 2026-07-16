@@ -48,9 +48,10 @@ body:
     attributes:
       label: Theme JSON
       description: >
-        The lighting itself. The Publish button puts this here for you. By hand: export a profile
-        from the app, or from `deerkb profile show`, and paste the whole file — only its lighting
-        will be published.
+        The lighting itself. The Publish button fills this in for you as a compressed string
+        starting with `z1.` — that is expected, leave it as it is. By hand: export a profile from
+        the app, or from `deerkb profile show`, and paste the whole file as plain JSON — only its
+        lighting will be published.
       render: json
     validations:
       # Declared, but do not rely on it: GitHub does not enforce `required` on a textarea that sets

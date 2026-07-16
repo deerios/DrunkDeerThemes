@@ -10,9 +10,13 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { deflateRawSync } from 'node:zlib';
 import { FIELDS, isChecked, parseIssueBody, unfence } from './lib/parse.mjs';
 import { LIMITS, toId, validateSubmission } from './lib/validate.mjs';
 import { buildIndex, serialise } from './lib/catalogue.mjs';
+
+/** Packs JSON the way the app's Publish link does, for tests on the receiving end of it. */
+const pack = (json) => `z1.${deflateRawSync(Buffer.from(json, 'utf8')).toString('base64url')}`;
 
 /** A submission with nothing wrong with it, for tests that want to break exactly one thing. */
 const good = () => ({
@@ -63,6 +67,33 @@ describe('the theme JSON', () => {
 
   test('is rejected when it is a list', () => {
     assert.match(errorsFor({ json: '[]' })[0], /must be an object/);
+  });
+});
+
+describe('the z1. packed form', () => {
+  // The other half of the fix for a signed-out Publish click: see README.md's "The z1. format".
+
+  test('unpacks to the identical theme a plain submission of the same JSON would produce', () => {
+    const json = JSON.stringify({ brightness: 9, baseColor: { r: 0, g: 40, b: 120 }, keys: { W: { r: 255, g: 120, b: 0 } } });
+    const plain = validateSubmission({ ...good(), json });
+    const packed = validateSubmission({ ...good(), json: pack(json) });
+    assert.deepEqual(packed.errors, []);
+    assert.deepEqual(packed.theme, plain.theme);
+  });
+
+  test('a bomb is refused rather than inflated', () => {
+    // A megabyte of zeroes deflates to a few hundred bytes — this is the shape of submission that
+    // would take an auto-merging runner down if it were inflated without a cap.
+    const bomb = `z1.${deflateRawSync(Buffer.alloc(1024 * 1024)).toString('base64url')}`;
+    assert.match(errorsFor({ json: bomb })[0], /over the .* limit/);
+  });
+
+  test('junk after the prefix is refused, not thrown', () => {
+    assert.match(errorsFor({ json: 'z1.not valid base64 at all $$$' })[0], /could not be read/);
+  });
+
+  test('an unknown prefix gets its own message rather than a JSON parse error', () => {
+    assert.match(errorsFor({ json: 'z2.whatever-a-future-version-sends' })[0], /newer version of the app/);
   });
 });
 
